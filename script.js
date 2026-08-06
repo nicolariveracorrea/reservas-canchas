@@ -18,16 +18,38 @@ const PRICE = 100000;
 const OPEN_HOUR = 8;
 const CLOSE_HOUR = 22;
 const TOTAL_COURTS = 10;
+const RESERVATIONS_STORAGE_KEY = "funcapazeReservations";
 
+const loadReservations = () => {
+  try {
+    const reservations = JSON.parse(localStorage.getItem(RESERVATIONS_STORAGE_KEY)) || [];
+    return Array.isArray(reservations)
+      ? reservations.filter(
+          (reservation) =>
+            Number.isInteger(reservation.courtNumber) &&
+            typeof reservation.date === "string" &&
+            Number.isInteger(reservation.hour)
+        )
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const storedReservations = loadReservations();
 const courtState = Array.from({ length: TOTAL_COURTS }, (_, idx) => ({
   number: idx + 1,
-  reservations: [],
+  reservations: storedReservations
+    .filter((reservation) => reservation.courtNumber === idx + 1)
+    .map(({ date, hour }) => ({ date, hour })),
 }));
-let reservationCount = 0;
+let reservationCount = storedReservations.length;
 const reservationsByHour = {};
 
 for (let hour = OPEN_HOUR; hour < CLOSE_HOUR; hour += 1) {
-  reservationsByHour[hour] = 0;
+  reservationsByHour[hour] = storedReservations.filter(
+    (reservation) => reservation.hour === hour
+  ).length;
 }
 
 const formatPrice = (value) =>
@@ -59,6 +81,16 @@ const isCourtReserved = (court, bookingDate, selectedHour) =>
     (reservation) =>
       reservation.date === bookingDate && reservation.hour === selectedHour
   );
+const saveReservations = () => {
+  const reservations = courtState.flatMap((court) =>
+    court.reservations.map((reservation) => ({
+      courtNumber: court.number,
+      ...reservation,
+    }))
+  );
+
+  localStorage.setItem(RESERVATIONS_STORAGE_KEY, JSON.stringify(reservations));
+};
 
 const toHourLabel = (hour) => {
   const suffix = hour >= 12 ? "p.m." : "a.m.";
@@ -309,6 +341,7 @@ bookingForm.addEventListener("submit", (event) => {
   selectedCourt.reservations.push({ date: bookingDate, hour: selectedHour });
   reservationCount += 1;
   reservationsByHour[selectedHour] += 1;
+  saveReservations();
   notifyN8n({
     event: "reservation.created",
     reservationId: crypto.randomUUID(),
