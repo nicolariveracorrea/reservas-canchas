@@ -21,8 +21,7 @@ const TOTAL_COURTS = 10;
 
 const courtState = Array.from({ length: TOTAL_COURTS }, (_, idx) => ({
   number: idx + 1,
-  reserved: false,
-  reservedRange: "",
+  reservations: [],
 }));
 let reservationCount = 0;
 const reservationsByHour = {};
@@ -52,6 +51,14 @@ const notifyN8n = (reservation) => {
     showToast("La reserva fue enviada por WhatsApp. No fue posible notificar a n8n.");
   });
 };
+
+const getSelectedDate = () => bookingDateInput.value;
+const getSelectedHour = () => Number(timeSelect.value);
+const isCourtReserved = (court, bookingDate, selectedHour) =>
+  court.reservations.some(
+    (reservation) =>
+      reservation.date === bookingDate && reservation.hour === selectedHour
+  );
 
 const toHourLabel = (hour) => {
   const suffix = hour >= 12 ? "p.m." : "a.m.";
@@ -99,10 +106,19 @@ const renderTimeOptions = () => {
 };
 
 const renderCourtOptions = () => {
-  const available = courtState.filter((court) => !court.reserved);
+  const selectedCourtNumber = Number(courtSelect.value);
+  const bookingDate = getSelectedDate();
+  const selectedHour = getSelectedHour();
+  const available = courtState.filter(
+    (court) => !isCourtReserved(court, bookingDate, selectedHour)
+  );
   courtSelect.innerHTML = available
     .map((court) => `<option value="${court.number}">Cancha ${court.number}</option>`)
     .join("");
+
+  if (available.some((court) => court.number === selectedCourtNumber)) {
+    courtSelect.value = String(selectedCourtNumber);
+  }
 
   const allReserved = available.length === 0;
   courtSelect.disabled = allReserved;
@@ -115,18 +131,26 @@ const renderCourtOptions = () => {
 };
 
 const renderAvailability = () => {
+  const bookingDate = getSelectedDate();
+  const selectedHour = getSelectedHour();
+  const range = `${toHourLabel(selectedHour)} - ${toHourLabel(selectedHour + 1)}`;
+
   availabilityList.innerHTML = courtState
     .map((court) => {
-      if (!court.reserved) {
-        return `<article class="availability-item available">Cancha ${court.number}<small>Disponible</small></article>`;
+      if (!isCourtReserved(court, bookingDate, selectedHour)) {
+        return `<article class="availability-item available">Cancha ${court.number}<small>Disponible: ${range}</small></article>`;
       }
-      return `<article class="availability-item reserved">Cancha ${court.number}<small>Reservada: ${court.reservedRange}</small></article>`;
+      return `<article class="availability-item reserved">Cancha ${court.number}<small>Reservada: ${range}</small></article>`;
     })
     .join("");
 };
 
 const updateDashboard = () => {
-  const availableCount = courtState.filter((court) => !court.reserved).length;
+  const bookingDate = getSelectedDate();
+  const selectedHour = getSelectedHour();
+  const availableCount = courtState.filter(
+    (court) => !isCourtReserved(court, bookingDate, selectedHour)
+  ).length;
   totalReservationsEl.textContent = String(reservationCount);
   availableCourtsEl.textContent = String(availableCount);
 };
@@ -264,7 +288,7 @@ bookingForm.addEventListener("submit", (event) => {
     return;
   }
 
-  if (!selectedCourt || selectedCourt.reserved) {
+  if (!selectedCourt || isCourtReserved(selectedCourt, bookingDate, selectedHour)) {
     showToast("Esa cancha ya no esta disponible, elige otra.");
     renderCourtOptions();
     return;
@@ -282,8 +306,7 @@ bookingForm.addEventListener("submit", (event) => {
     return;
   }
 
-  selectedCourt.reserved = true;
-  selectedCourt.reservedRange = `${bookingDate} ${range}`;
+  selectedCourt.reservations.push({ date: bookingDate, hour: selectedHour });
   reservationCount += 1;
   reservationsByHour[selectedHour] += 1;
   notifyN8n({
@@ -305,6 +328,17 @@ bookingForm.addEventListener("submit", (event) => {
   updateDashboard();
   renderReservationsChart();
   showToast(`Reserva enviada para Cancha ${selectedCourtNumber}`);
+});
+
+bookingDateInput.addEventListener("change", () => {
+  renderCourtOptions();
+  renderAvailability();
+  updateDashboard();
+});
+timeSelect.addEventListener("change", () => {
+  renderCourtOptions();
+  renderAvailability();
+  updateDashboard();
 });
 
 setupDateField();
