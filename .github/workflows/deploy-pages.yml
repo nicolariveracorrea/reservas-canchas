@@ -29,8 +29,17 @@ jobs:
 
       - name: Prepare site files
         run: |
+          version="${GITHUB_SHA::7}"
           mkdir _site
-          cp index.html styles.css script.js config.js _site/
+          cp index.html _site/
+          cp styles.css "_site/styles-${version}.css"
+          cp config.js "_site/config-${version}.js"
+          cp script.js "_site/script-${version}.js"
+          sed -i \
+            -e "s|styles.css|styles-${version}.css|" \
+            -e "s|config.js|config-${version}.js|" \
+            -e "s|script.js|script-${version}.js|" \
+            _site/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
