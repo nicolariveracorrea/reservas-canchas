@@ -54,15 +54,6 @@
             value="573001112233"
             aria-label="Numero de WhatsApp para reservas"
           />
-          <a
-            id="waLink"
-            class="wa-link"
-            href="https://wa.me/573001112233"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Abrir WhatsApp
-          </a>
         </article>
       </section>
 
@@ -81,14 +72,6 @@
             <h3>Canchas disponibles</h3>
             <p id="availableCourts" class="metric-number">10</p>
           </article>
-        </section>
-
-        <section class="loyalty-panel" aria-labelledby="loyaltyTitle">
-          <div>
-            <h3 id="loyaltyTitle">Tus sellos de fidelidad</h3>
-            <p id="loyaltyStatus" class="loyalty-status">Ingresa tu telefono para consultar tus sellos.</p>
-          </div>
-          <div id="loyaltyStamps" class="loyalty-stamps" aria-live="polite"></div>
         </section>
 
         <section class="booking-panel" aria-label="Formulario unico de reserva">
@@ -139,10 +122,6 @@
                 required
               />
             </div>
-            <label class="reward-option" for="useFreeHour">
-              <input id="useFreeHour" type="checkbox" disabled />
-              <span>Usar una hora gratis</span>
-            </label>
             <button id="reserveMainBtn" class="reserve-btn reserve-main-btn" type="submit">
               Reservar por WhatsApp
             </button>
@@ -165,6 +144,7 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <script src="config.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

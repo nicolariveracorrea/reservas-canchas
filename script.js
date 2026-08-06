@@ -1,6 +1,5 @@
 const toast = document.getElementById("toast");
 const waNumberInput = document.getElementById("waNumber");
-const waLink = document.getElementById("waLink");
 const bookingForm = document.getElementById("bookingForm");
 const bookingDateInput = document.getElementById("bookingDate");
 const courtSelect = document.getElementById("courtSelect");
@@ -8,25 +7,22 @@ const timeSelect = document.getElementById("timeSelect");
 const customerNameInput = document.getElementById("customerName");
 const customerPhoneInput = document.getElementById("customerPhone");
 const customerEmailInput = document.getElementById("customerEmail");
-const useFreeHourInput = document.getElementById("useFreeHour");
 const totalReservationsEl = document.getElementById("totalReservations");
 const availableCourtsEl = document.getElementById("availableCourts");
 const availabilityList = document.getElementById("availabilityList");
 const reserveMainBtn = document.getElementById("reserveMainBtn");
 const reservationsChart = document.getElementById("reservationsChart");
-const loyaltyStatus = document.getElementById("loyaltyStatus");
-const loyaltyStamps = document.getElementById("loyaltyStamps");
+const n8nWebhookUrl = window.RESERVAS_CONFIG?.n8nWebhookUrl?.trim() || "";
 
 const PRICE = 100000;
 const OPEN_HOUR = 8;
 const CLOSE_HOUR = 22;
 const TOTAL_COURTS = 10;
-const STAMPS_REQUIRED = 10;
-const LOYALTY_STORAGE_KEY = "reservasCanchasLoyalty";
 
 const courtState = Array.from({ length: TOTAL_COURTS }, (_, idx) => ({
   number: idx + 1,
-  reservations: [],
+  reserved: false,
+  reservedRange: "",
 }));
 let reservationCount = 0;
 const reservationsByHour = {};
@@ -45,86 +41,16 @@ const formatPrice = (value) =>
 const sanitizePhone = (phone) => phone.replace(/\D/g, "");
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
 
-const loadLoyaltyAccounts = () => {
-  try {
-    return JSON.parse(localStorage.getItem(LOYALTY_STORAGE_KEY)) || {};
-  } catch {
-    return {};
-  }
-};
+const notifyN8n = (reservation) => {
+  if (!n8nWebhookUrl) return;
 
-const loyaltyAccounts = loadLoyaltyAccounts();
-
-const getLoyaltyAccount = (phone) =>
-  loyaltyAccounts[phone] || { stamps: 0, freeHours: 0 };
-
-const saveLoyaltyAccount = (phone, account) => {
-  loyaltyAccounts[phone] = account;
-  localStorage.setItem(LOYALTY_STORAGE_KEY, JSON.stringify(loyaltyAccounts));
-};
-
-const renderLoyalty = () => {
-  const customerPhone = sanitizePhone(customerPhoneInput.value || "");
-  const hasValidPhone = customerPhone.length >= 7;
-  const account = hasValidPhone ? getLoyaltyAccount(customerPhone) : { stamps: 0, freeHours: 0 };
-
-  loyaltyStamps.innerHTML = Array.from({ length: STAMPS_REQUIRED }, (_, index) => {
-    const stampNumber = index + 1;
-    const earned = stampNumber <= account.stamps;
-    return `<span class="loyalty-stamp${earned ? " is-earned" : ""}" aria-label="Sello ${stampNumber}${earned ? " conseguido" : " pendiente"}">${stampNumber}</span>`;
-  }).join("");
-
-  if (!hasValidPhone) {
-    loyaltyStatus.textContent = "Ingresa tu telefono para consultar tus sellos.";
-    useFreeHourInput.checked = false;
-    useFreeHourInput.disabled = true;
-    return;
-  }
-
-  const rewardLabel = account.freeHours === 1 ? "1 hora gratis disponible." : `${account.freeHours} horas gratis disponibles.`;
-  loyaltyStatus.textContent = account.freeHours > 0
-    ? `${account.stamps}/10 sellos. ${rewardLabel}`
-    : `${account.stamps}/10 sellos. Al completar 10 recibes una hora gratis.`;
-  useFreeHourInput.disabled = account.freeHours === 0;
-  if (useFreeHourInput.disabled) {
-    useFreeHourInput.checked = false;
-  }
-};
-
-const addLoyaltyStamp = (phone, usedFreeHour) => {
-  const account = getLoyaltyAccount(phone);
-
-  if (usedFreeHour) {
-    account.freeHours -= 1;
-    saveLoyaltyAccount(phone, account);
-    return { earnedReward: false };
-  }
-
-  account.stamps += 1;
-  const earnedReward = account.stamps === STAMPS_REQUIRED;
-  if (earnedReward) {
-    account.stamps = 0;
-    account.freeHours += 1;
-  }
-  saveLoyaltyAccount(phone, account);
-  return { earnedReward };
-};
-
-const getSelectedDate = () => bookingDateInput.value;
-const getSelectedHour = () => Number(timeSelect.value);
-const isCourtReserved = (court, bookingDate, selectedHour) =>
-  court.reservations.some(
-    (reservation) =>
-      reservation.date === bookingDate && reservation.hour === selectedHour
-  );
-
-const updateWhatsAppLink = () => {
-  const waNumber = sanitizePhone(waNumberInput.value);
-  const isValidNumber = waNumber.length >= 10;
-
-  waLink.href = isValidNumber ? `https://wa.me/${waNumber}` : "#";
-  waLink.setAttribute("aria-disabled", String(!isValidNumber));
-  waLink.classList.toggle("is-disabled", !isValidNumber);
+  fetch(n8nWebhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(reservation),
+  }).catch(() => {
+    showToast("La reserva fue enviada por WhatsApp. No fue posible notificar a n8n.");
+  });
 };
 
 const toHourLabel = (hour) => {
@@ -173,19 +99,10 @@ const renderTimeOptions = () => {
 };
 
 const renderCourtOptions = () => {
-  const selectedCourtNumber = Number(courtSelect.value);
-  const bookingDate = getSelectedDate();
-  const selectedHour = getSelectedHour();
-  const available = courtState.filter(
-    (court) => !isCourtReserved(court, bookingDate, selectedHour)
-  );
+  const available = courtState.filter((court) => !court.reserved);
   courtSelect.innerHTML = available
     .map((court) => `<option value="${court.number}">Cancha ${court.number}</option>`)
     .join("");
-
-  if (available.some((court) => court.number === selectedCourtNumber)) {
-    courtSelect.value = String(selectedCourtNumber);
-  }
 
   const allReserved = available.length === 0;
   courtSelect.disabled = allReserved;
@@ -198,26 +115,18 @@ const renderCourtOptions = () => {
 };
 
 const renderAvailability = () => {
-  const bookingDate = getSelectedDate();
-  const selectedHour = getSelectedHour();
-  const range = `${toHourLabel(selectedHour)} - ${toHourLabel(selectedHour + 1)}`;
-
   availabilityList.innerHTML = courtState
     .map((court) => {
-      if (!isCourtReserved(court, bookingDate, selectedHour)) {
-        return `<article class="availability-item available">Cancha ${court.number}<small>Disponible: ${range}</small></article>`;
+      if (!court.reserved) {
+        return `<article class="availability-item available">Cancha ${court.number}<small>Disponible</small></article>`;
       }
-      return `<article class="availability-item reserved">Cancha ${court.number}<small>Reservada: ${range}</small></article>`;
+      return `<article class="availability-item reserved">Cancha ${court.number}<small>Reservada: ${court.reservedRange}</small></article>`;
     })
     .join("");
 };
 
 const updateDashboard = () => {
-  const bookingDate = getSelectedDate();
-  const selectedHour = getSelectedHour();
-  const availableCount = courtState.filter(
-    (court) => !isCourtReserved(court, bookingDate, selectedHour)
-  ).length;
+  const availableCount = courtState.filter((court) => !court.reserved).length;
   totalReservationsEl.textContent = String(reservationCount);
   availableCourtsEl.textContent = String(availableCount);
 };
@@ -283,8 +192,7 @@ const openWhatsAppReservation = (
   bookingDate,
   customerName,
   customerPhone,
-  customerEmail,
-  usedFreeHour
+  customerEmail
 ) => {
   const waNumber = sanitizePhone(waNumberInput.value || "");
 
@@ -304,7 +212,7 @@ const openWhatsAppReservation = (
     `Horario: ${range}`,
     `Telefono: ${customerPhone}`,
     `Correo: ${customerEmail}`,
-    `Precio: ${usedFreeHour ? "Hora gratis por fidelidad" : `${formatPrice(PRICE)} por hora`}`,
+    `Precio: ${formatPrice(PRICE)} por hora`,
   ].join("\n");
 
   const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
@@ -356,14 +264,11 @@ bookingForm.addEventListener("submit", (event) => {
     return;
   }
 
-  if (!selectedCourt || isCourtReserved(selectedCourt, bookingDate, selectedHour)) {
+  if (!selectedCourt || selectedCourt.reserved) {
     showToast("Esa cancha ya no esta disponible, elige otra.");
     renderCourtOptions();
     return;
   }
-
-  const loyaltyAccount = getLoyaltyAccount(customerPhone);
-  const usedFreeHour = useFreeHourInput.checked && loyaltyAccount.freeHours > 0;
 
   const range = openWhatsAppReservation(
     selectedCourtNumber,
@@ -371,43 +276,35 @@ bookingForm.addEventListener("submit", (event) => {
     bookingDate,
     customerName,
     customerPhone,
-    customerEmail,
-    usedFreeHour
+    customerEmail
   );
   if (!range) {
     return;
   }
 
-  selectedCourt.reservations.push({ date: bookingDate, hour: selectedHour });
+  selectedCourt.reserved = true;
+  selectedCourt.reservedRange = `${bookingDate} ${range}`;
   reservationCount += 1;
   reservationsByHour[selectedHour] += 1;
-  const { earnedReward } = addLoyaltyStamp(customerPhone, usedFreeHour);
+  notifyN8n({
+    event: "reservation.created",
+    reservationId: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    customerName,
+    customerPhone,
+    customerEmail,
+    courtNumber: selectedCourtNumber,
+    bookingDate,
+    startHour: selectedHour,
+    endHour: selectedHour + 1,
+    price: PRICE,
+  });
 
   renderCourtOptions();
   renderAvailability();
   updateDashboard();
   renderReservationsChart();
-  renderLoyalty();
-  showToast(
-    earnedReward
-      ? "Completaste 10 sellos. Tienes una hora gratis."
-      : usedFreeHour
-        ? "Reserva enviada usando tu hora gratis."
-        : `Reserva enviada para Cancha ${selectedCourtNumber}`
-  );
-});
-
-waNumberInput.addEventListener("input", updateWhatsAppLink);
-customerPhoneInput.addEventListener("input", renderLoyalty);
-bookingDateInput.addEventListener("change", () => {
-  renderCourtOptions();
-  renderAvailability();
-  updateDashboard();
-});
-timeSelect.addEventListener("change", () => {
-  renderCourtOptions();
-  renderAvailability();
-  updateDashboard();
+  showToast(`Reserva enviada para Cancha ${selectedCourtNumber}`);
 });
 
 setupDateField();
@@ -416,5 +313,3 @@ renderCourtOptions();
 renderAvailability();
 updateDashboard();
 renderReservationsChart();
-updateWhatsAppLink();
-renderLoyalty();

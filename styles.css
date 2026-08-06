@@ -140,32 +140,6 @@ h1 {
   background: #fff;
 }
 
-.wa-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 0.9rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-
-.wa-link:hover,
-.wa-link:focus-visible {
-  background: #0a6443;
-}
-
-.wa-link.is-disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-  pointer-events: none;
-}
-
 .court-section {
   margin-top: 30px;
 }
@@ -215,55 +189,6 @@ h1 {
   color: var(--accent);
 }
 
-.loyalty-panel {
-  margin-top: 18px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
-  gap: 18px;
-  align-items: center;
-  background: #fff;
-  border: 1px solid rgba(43, 42, 38, 0.08);
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: var(--shadow);
-}
-
-.loyalty-panel h3 {
-  margin: 0;
-  font-size: 1rem;
-}
-
-.loyalty-status {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.loyalty-stamps {
-  display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.loyalty-stamp {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1;
-  min-width: 0;
-  border: 1px dashed rgba(15, 123, 83, 0.38);
-  border-radius: 50%;
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.loyalty-stamp.is-earned {
-  border-style: solid;
-  background: var(--accent);
-  color: #fff;
-}
-
 .booking-panel {
   margin-top: 18px;
   background: linear-gradient(180deg, var(--surface), var(--surface-strong));
@@ -308,26 +233,6 @@ h1 {
   font-family: inherit;
   font-weight: 600;
   background: #fff;
-}
-
-.reward-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  color: var(--muted);
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.reward-option input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--accent);
-}
-
-.reward-option:has(input:disabled) {
-  opacity: 0.55;
 }
 
 .booking-rule {
@@ -581,8 +486,7 @@ h1 {
   .info-grid,
   .court-grid,
   .dashboard-grid,
-  .availability-list,
-  .loyalty-panel {
+  .availability-list {
     grid-template-columns: 1fr;
   }
 
