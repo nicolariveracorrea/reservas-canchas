@@ -12,13 +12,18 @@ const availableCourtsEl = document.getElementById("availableCourts");
 const availabilityList = document.getElementById("availabilityList");
 const reserveMainBtn = document.getElementById("reserveMainBtn");
 const reservationsChart = document.getElementById("reservationsChart");
+const loyaltyStatus = document.getElementById("loyaltyStatus");
+const loyaltyStamps = document.getElementById("loyaltyStamps");
+const useFreeHourInput = document.getElementById("useFreeHour");
 const n8nWebhookUrl = window.RESERVAS_CONFIG?.n8nWebhookUrl?.trim() || "";
 
 const PRICE = 100000;
 const OPEN_HOUR = 8;
 const CLOSE_HOUR = 22;
 const TOTAL_COURTS = 10;
+const STAMPS_REQUIRED = 10;
 const RESERVATIONS_STORAGE_KEY = "funcapazeReservations";
+const LOYALTY_STORAGE_KEY = "funcapazeLoyalty";
 
 const loadReservations = () => {
   try {
@@ -61,6 +66,65 @@ const formatPrice = (value) =>
 
 const sanitizePhone = (phone) => phone.replace(/\D/g, "");
 const isValidEmail = (email) => /\S+@\S+\.\S+/.test(email);
+
+const loadLoyaltyAccounts = () => {
+  try {
+    return JSON.parse(localStorage.getItem(LOYALTY_STORAGE_KEY)) || {};
+  } catch {
+    return {};
+  }
+};
+
+const loyaltyAccounts = loadLoyaltyAccounts();
+const getLoyaltyAccount = (phone) =>
+  loyaltyAccounts[phone] || { stamps: 0, freeHours: 0 };
+const saveLoyaltyAccount = (phone, account) => {
+  loyaltyAccounts[phone] = account;
+  localStorage.setItem(LOYALTY_STORAGE_KEY, JSON.stringify(loyaltyAccounts));
+};
+
+const renderLoyalty = () => {
+  const customerPhone = sanitizePhone(customerPhoneInput.value || "");
+  const hasValidPhone = customerPhone.length >= 7;
+  const account = hasValidPhone ? getLoyaltyAccount(customerPhone) : { stamps: 0, freeHours: 0 };
+
+  loyaltyStamps.innerHTML = Array.from({ length: STAMPS_REQUIRED }, (_, index) => {
+    const stampNumber = index + 1;
+    const earned = stampNumber <= account.stamps;
+    return `<span class="loyalty-stamp${earned ? " is-earned" : ""}" aria-label="Sello ${stampNumber}${earned ? " conseguido" : " pendiente"}">${stampNumber}</span>`;
+  }).join("");
+
+  if (!hasValidPhone) {
+    loyaltyStatus.textContent = "Ingresa tu telefono para consultar tus sellos.";
+    useFreeHourInput.checked = false;
+    useFreeHourInput.disabled = true;
+    return;
+  }
+
+  loyaltyStatus.textContent = account.freeHours > 0
+    ? `${account.stamps}/10 sellos. ${account.freeHours} hora${account.freeHours === 1 ? "" : "s"} gratis disponible${account.freeHours === 1 ? "" : "s"}.`
+    : `${account.stamps}/10 sellos. Al completar 10 recibes una hora gratis.`;
+  useFreeHourInput.disabled = account.freeHours === 0;
+  if (useFreeHourInput.disabled) useFreeHourInput.checked = false;
+};
+
+const addLoyaltyStamp = (phone, usedFreeHour) => {
+  const account = getLoyaltyAccount(phone);
+  if (usedFreeHour) {
+    account.freeHours -= 1;
+    saveLoyaltyAccount(phone, account);
+    return false;
+  }
+
+  account.stamps += 1;
+  const earnedReward = account.stamps === STAMPS_REQUIRED;
+  if (earnedReward) {
+    account.stamps = 0;
+    account.freeHours += 1;
+  }
+  saveLoyaltyAccount(phone, account);
+  return earnedReward;
+};
 
 const notifyN8n = (reservation) => {
   if (!n8nWebhookUrl) return;
@@ -248,7 +312,8 @@ const openWhatsAppReservation = (
   bookingDate,
   customerName,
   customerPhone,
-  customerEmail
+  customerEmail,
+  usedFreeHour
 ) => {
   const waNumber = sanitizePhone(waNumberInput.value || "");
 
@@ -268,7 +333,7 @@ const openWhatsAppReservation = (
     `Horario: ${range}`,
     `Telefono: ${customerPhone}`,
     `Correo: ${customerEmail}`,
-    `Precio: ${formatPrice(PRICE)} por hora`,
+    `Precio: ${usedFreeHour ? "Hora gratis por fidelidad" : `${formatPrice(PRICE)} por hora`}`,
   ].join("\n");
 
   const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
@@ -326,13 +391,17 @@ bookingForm.addEventListener("submit", (event) => {
     return;
   }
 
+  const loyaltyAccount = getLoyaltyAccount(customerPhone);
+  const usedFreeHour = useFreeHourInput.checked && loyaltyAccount.freeHours > 0;
+
   const range = openWhatsAppReservation(
     selectedCourtNumber,
     selectedHour,
     bookingDate,
     customerName,
     customerPhone,
-    customerEmail
+    customerEmail,
+    usedFreeHour
   );
   if (!range) {
     return;
@@ -342,6 +411,7 @@ bookingForm.addEventListener("submit", (event) => {
   reservationCount += 1;
   reservationsByHour[selectedHour] += 1;
   saveReservations();
+  const earnedReward = addLoyaltyStamp(customerPhone, usedFreeHour);
   notifyN8n({
     event: "reservation.created",
     reservationId: crypto.randomUUID(),
@@ -353,14 +423,22 @@ bookingForm.addEventListener("submit", (event) => {
     bookingDate,
     startHour: selectedHour,
     endHour: selectedHour + 1,
-    price: PRICE,
+    price: usedFreeHour ? 0 : PRICE,
+    usedFreeHour,
   });
 
   renderCourtOptions();
   renderAvailability();
   updateDashboard();
   renderReservationsChart();
-  showToast(`Reserva enviada para Cancha ${selectedCourtNumber}`);
+  renderLoyalty();
+  showToast(
+    earnedReward
+      ? "Completaste 10 sellos. Tienes una hora gratis."
+      : usedFreeHour
+        ? "Reserva enviada usando tu hora gratis."
+        : `Reserva enviada para Cancha ${selectedCourtNumber}`
+  );
 });
 
 bookingDateInput.addEventListener("change", () => {
@@ -373,6 +451,7 @@ timeSelect.addEventListener("change", () => {
   renderAvailability();
   updateDashboard();
 });
+customerPhoneInput.addEventListener("input", renderLoyalty);
 
 setupDateField();
 renderTimeOptions();
@@ -380,3 +459,4 @@ renderCourtOptions();
 renderAvailability();
 updateDashboard();
 renderReservationsChart();
+renderLoyalty();

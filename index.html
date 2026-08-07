@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Reservas de Canchas</title>
+    <title>Funcapaze | Reservas de Canchas</title>
     <meta
       name="description"
-      content="Reserva 10 canchas por hora. Precio fijo de 100.000 COP y horario de 8:00 a.m. a 10:00 p.m."
+      content="Funcapaze: reserva 10 canchas por hora. Precio fijo de 100.000 COP y horario de 8:00 a.m. a 10:00 p.m."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,7 +23,7 @@
     <main class="container">
       <header class="hero">
         <p class="hero-tag">Reserva en segundos</p>
-        <h1>Reservas de Canchas</h1>
+        <h1>Funcapaze</h1>
         <p class="hero-subtitle">
           10 canchas disponibles todos los dias de 8:00 a.m. a 10:00 p.m.
         </p>
@@ -74,6 +74,14 @@
           </article>
         </section>
 
+        <section class="loyalty-panel" aria-labelledby="loyaltyTitle">
+          <div>
+            <h3 id="loyaltyTitle">Tus sellos de fidelidad</h3>
+            <p id="loyaltyStatus" class="loyalty-status">Ingresa tu telefono para consultar tus sellos.</p>
+          </div>
+          <div id="loyaltyStamps" class="loyalty-stamps" aria-live="polite"></div>
+        </section>
+
         <section class="booking-panel" aria-label="Formulario unico de reserva">
           <form id="bookingForm" class="booking-form">
             <div class="field">
@@ -122,6 +130,10 @@
                 required
               />
             </div>
+            <label class="reward-option" for="useFreeHour">
+              <input id="useFreeHour" type="checkbox" disabled />
+              <span>Usar una hora gratis</span>
+            </label>
             <button id="reserveMainBtn" class="reserve-btn reserve-main-btn" type="submit">
               Reservar por WhatsApp
             </button>
