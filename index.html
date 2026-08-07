@@ -141,6 +141,27 @@
           <p class="booking-rule">Regla de 15 minutos: la reserva debe hacerse con al menos 15 minutos de anticipacion.</p>
         </section>
 
+        <section class="my-reservations-panel" aria-labelledby="myReservationsTitle">
+          <div class="my-reservations-heading">
+            <div>
+              <h3 id="myReservationsTitle">Mis reservas</h3>
+              <p>Ingresa tu telefono para ver o cancelar una reserva.</p>
+            </div>
+            <label class="reservation-lookup" for="reservationLookupPhone">
+              <span>Tu telefono</span>
+              <input
+                id="reservationLookupPhone"
+                class="booking-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="tel"
+                placeholder="3001112233"
+              />
+            </label>
+          </div>
+          <div id="myReservationsList" class="my-reservations-list" aria-live="polite"></div>
+        </section>
+
         <section class="availability-panel" aria-label="Estado de canchas">
           <h3>Estado actual de canchas</h3>
           <div id="availabilityList" class="availability-list" aria-live="polite"></div>

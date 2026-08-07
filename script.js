@@ -15,7 +15,10 @@ const reservationsChart = document.getElementById("reservationsChart");
 const loyaltyStatus = document.getElementById("loyaltyStatus");
 const loyaltyStamps = document.getElementById("loyaltyStamps");
 const useFreeHourInput = document.getElementById("useFreeHour");
+const reservationLookupPhoneInput = document.getElementById("reservationLookupPhone");
+const myReservationsList = document.getElementById("myReservationsList");
 const n8nWebhookUrl = window.RESERVAS_CONFIG?.n8nWebhookUrl?.trim() || "";
+const rewardOption = useFreeHourInput.closest(".reward-option");
 
 const PRICE = 100000;
 const OPEN_HOUR = 8;
@@ -46,7 +49,7 @@ const courtState = Array.from({ length: TOTAL_COURTS }, (_, idx) => ({
   number: idx + 1,
   reservations: storedReservations
     .filter((reservation) => reservation.courtNumber === idx + 1)
-    .map(({ date, hour }) => ({ date, hour })),
+    .map((reservation) => ({ ...reservation })),
 }));
 let reservationCount = storedReservations.length;
 const reservationsByHour = {};
@@ -98,13 +101,16 @@ const renderLoyalty = () => {
     loyaltyStatus.textContent = "Ingresa tu telefono para consultar tus sellos.";
     useFreeHourInput.checked = false;
     useFreeHourInput.disabled = true;
+    rewardOption.hidden = true;
     return;
   }
 
   loyaltyStatus.textContent = account.freeHours > 0
     ? `${account.stamps}/10 sellos. ${account.freeHours} hora${account.freeHours === 1 ? "" : "s"} gratis disponible${account.freeHours === 1 ? "" : "s"}.`
     : `${account.stamps}/10 sellos. Al completar 10 recibes una hora gratis.`;
-  useFreeHourInput.disabled = account.freeHours === 0;
+  const canUseFreeHour = account.freeHours > 0;
+  rewardOption.hidden = !canUseFreeHour;
+  useFreeHourInput.disabled = !canUseFreeHour;
   if (useFreeHourInput.disabled) useFreeHourInput.checked = false;
 };
 
@@ -154,6 +160,86 @@ const saveReservations = () => {
   );
 
   localStorage.setItem(RESERVATIONS_STORAGE_KEY, JSON.stringify(reservations));
+};
+
+const renderMyReservations = () => {
+  const customerPhone = sanitizePhone(reservationLookupPhoneInput.value || "");
+  if (customerPhone.length < 7) {
+    myReservationsList.innerHTML = '<p class="my-reservations-empty">Ingresa tu telefono para consultar tus reservas.</p>';
+    return;
+  }
+
+  const reservations = courtState.flatMap((court) =>
+    court.reservations
+      .filter((reservation) => reservation.customerPhone === customerPhone)
+      .map((reservation) => ({ ...reservation, courtNumber: court.number }))
+  );
+
+  if (reservations.length === 0) {
+    myReservationsList.innerHTML = '<p class="my-reservations-empty">No tienes reservas activas con este telefono.</p>';
+    return;
+  }
+
+  myReservationsList.innerHTML = reservations
+    .sort((first, second) => `${first.date}${first.hour}`.localeCompare(`${second.date}${second.hour}`))
+    .map((reservation) => `
+      <article class="my-reservation-item">
+        <div>
+          <strong>Cancha ${reservation.courtNumber}</strong>
+          <span>${reservation.date} | ${toHourLabel(reservation.hour)} - ${toHourLabel(reservation.hour + 1)}</span>
+        </div>
+        <button class="cancel-reservation-btn" type="button" data-reservation-id="${reservation.id}">Cancelar reserva</button>
+      </article>
+    `)
+    .join("");
+};
+
+const cancelReservation = (reservationId) => {
+  let cancelledReservation;
+
+  courtState.forEach((court) => {
+    const reservationIndex = court.reservations.findIndex(
+      (reservation) => reservation.id === reservationId
+    );
+    if (reservationIndex !== -1) {
+      cancelledReservation = court.reservations.splice(reservationIndex, 1)[0];
+    }
+  });
+
+  if (!cancelledReservation) return;
+
+  reservationCount -= 1;
+  reservationsByHour[cancelledReservation.hour] -= 1;
+
+  if (cancelledReservation.customerPhone) {
+    const account = getLoyaltyAccount(cancelledReservation.customerPhone);
+    if (cancelledReservation.usedFreeHour) {
+      account.freeHours += 1;
+    } else if (cancelledReservation.earnedReward) {
+      account.freeHours = Math.max(0, account.freeHours - 1);
+      account.stamps = STAMPS_REQUIRED - 1;
+    } else {
+      account.stamps = Math.max(0, account.stamps - 1);
+    }
+    saveLoyaltyAccount(cancelledReservation.customerPhone, account);
+  }
+
+  saveReservations();
+  notifyN8n({
+    event: "reservation.cancelled",
+    reservationId: cancelledReservation.id,
+    customerPhone: cancelledReservation.customerPhone,
+    courtNumber: cancelledReservation.courtNumber,
+    bookingDate: cancelledReservation.date,
+    startHour: cancelledReservation.hour,
+  });
+  renderCourtOptions();
+  renderAvailability();
+  updateDashboard();
+  renderReservationsChart();
+  renderLoyalty();
+  renderMyReservations();
+  showToast("Reserva cancelada. La cancha vuelve a estar disponible.");
 };
 
 const toHourLabel = (hour) => {
@@ -407,14 +493,24 @@ bookingForm.addEventListener("submit", (event) => {
     return;
   }
 
-  selectedCourt.reservations.push({ date: bookingDate, hour: selectedHour });
+  const reservationId = crypto.randomUUID();
+  selectedCourt.reservations.push({
+    id: reservationId,
+    date: bookingDate,
+    hour: selectedHour,
+    customerName,
+    customerPhone,
+    customerEmail,
+    usedFreeHour,
+  });
   reservationCount += 1;
   reservationsByHour[selectedHour] += 1;
-  saveReservations();
   const earnedReward = addLoyaltyStamp(customerPhone, usedFreeHour);
+  selectedCourt.reservations.at(-1).earnedReward = earnedReward;
+  saveReservations();
   notifyN8n({
     event: "reservation.created",
-    reservationId: crypto.randomUUID(),
+    reservationId,
     createdAt: new Date().toISOString(),
     customerName,
     customerPhone,
@@ -432,6 +528,8 @@ bookingForm.addEventListener("submit", (event) => {
   updateDashboard();
   renderReservationsChart();
   renderLoyalty();
+  reservationLookupPhoneInput.value = customerPhone;
+  renderMyReservations();
   showToast(
     earnedReward
       ? "Completaste 10 sellos. Tienes una hora gratis."
@@ -452,6 +550,11 @@ timeSelect.addEventListener("change", () => {
   updateDashboard();
 });
 customerPhoneInput.addEventListener("input", renderLoyalty);
+reservationLookupPhoneInput.addEventListener("input", renderMyReservations);
+myReservationsList.addEventListener("click", (event) => {
+  const cancelButton = event.target.closest(".cancel-reservation-btn");
+  if (cancelButton) cancelReservation(cancelButton.dataset.reservationId);
+});
 
 setupDateField();
 renderTimeOptions();
@@ -460,3 +563,4 @@ renderAvailability();
 updateDashboard();
 renderReservationsChart();
 renderLoyalty();
+renderMyReservations();
